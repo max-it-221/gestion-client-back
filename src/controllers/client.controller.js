@@ -1,6 +1,5 @@
 const Client = require('../models/client.model');
 
-// ➕ Ajouter un client
 exports.createClient = async (req, res) => {
   try {
     const client = new Client(req.body);
