@@ -1,8 +1,6 @@
 const Client = require('../models/Client');
 const Telephone = require('../models/Telephone');
 const Joi = require('joi');
-
-// Schema de validation pour client
 const clientSchema = Joi.object({
   nom: Joi.string().min(2).max(50).required(),
   prenom: Joi.string().min(2).max(50).required(),
@@ -10,7 +8,6 @@ const clientSchema = Joi.object({
 });
 
 const clientController = {
-  // Récupérer un client par numéro de téléphone
   getClientByNumero: async (req, res) => {
     try {
       const { numero } = req.params;
@@ -19,20 +16,16 @@ const clientController = {
         return res.status(400).json({ error: 'Numéro de téléphone requis' });
       }
 
-      // Chercher le téléphone avec le numéro donné
       const telephone = await Telephone.findOne({ numero: numero })
           .populate('client');
 
       if (!telephone) {
         return res.status(404).json({ error: 'Numéro de téléphone non trouvé' });
       }
-
-      // Vérifier si le téléphone est actif
       if (!telephone.active) {
         return res.status(403).json({ error: 'Numéro de téléphone inactif' });
       }
 
-      // Retourner les informations du client
       const clientData = {
         id: telephone.client._id,
         nom: telephone.client.nom,
