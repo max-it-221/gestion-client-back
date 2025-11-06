@@ -1,51 +1,48 @@
 const mongoose = require('mongoose');
 
 const requestLogSchema = new mongoose.Schema({
-    endpoint: {
-        type: String,
-        required: true
-    },
-    method: {
-        type: String,
-        required: true
-    },
-    numeroTelephone: {
-        type: String,
-        default: null
-    },
-    clientId: {
-        type: String,
-        default: null
-    },
-    status: {
-        type: String,
-        enum: ['SUCCESS', 'ERROR', 'NOT_FOUND', 'INACTIVE'],
-        required: true
-    },
-    message: {
-        type: String,
-        default: null
-    },
-    requestTime: {
-        type: Date,
-        default: Date.now
-    },
-    responseTime: {
-        type: Number // en millisecondes
-    },
-    ipAddress: {
-        type: String
-    },
-    userAgent: {
-        type: String
-    }
+  numero: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  operation: {
+    type: String,
+    required: true,
+    enum: ['GET_CLIENT', 'SEARCH_CLIENT']
+  },
+  statut: {
+    type: String,
+    required: true,
+    enum: ['SUCCESS', 'ERROR', 'NOT_FOUND', 'INACTIVE']
+  },
+  message: {
+    type: String,
+    default: null
+  },
+  comptePrincipal: {
+    type: String,
+    default: null // Numéro du compte Maxit qui fait la demande
+  },
+  ipAddress: {
+    type: String,
+    default: null
+  },
+  userAgent: {
+    type: String,
+    default: null
+  },
+  dateRequete: {
+    type: Date,
+    default: Date.now
+  }
 }, {
-    timestamps: true
+  timestamps: true
 });
 
-// Index pour les requêtes de logs
-requestLogSchema.index({ requestTime: -1 });
-requestLogSchema.index({ numeroTelephone: 1 });
-requestLogSchema.index({ status: 1 });
+// Index pour améliorer les performances
+requestLogSchema.index({ numero: 1, dateRequete: -1 });
+requestLogSchema.index({ comptePrincipal: 1, dateRequete: -1 });
+requestLogSchema.index({ statut: 1 });
 
 module.exports = mongoose.model('RequestLog', requestLogSchema);

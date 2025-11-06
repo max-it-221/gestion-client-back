@@ -1,179 +1,143 @@
-const Client = require('../models/Client');
-const Telephone = require('../models/Telephone');
-const Joi = require('joi');
-const clientSchema = Joi.object({
-  nom: Joi.string().min(2).max(50).required(),
-  prenom: Joi.string().min(2).max(50).required(),
-  photo: Joi.string().uri().optional()
-});
+// src/controllers/clientController.js
+const { validationResult } = require('express-validator');
+const clientService = require('../services/clientService');
 
-const clientController = {
-  getClientByNumero: async (req, res) => {
+class ClientController {
+
+  /**
+   * GET /api/clients/:numero
+   * Récupère un client par son numéro
+   */
+  async getClient(req, res, next) {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          errors: errors.array()
+        });
+      }
+
       const { numero } = req.params;
+      const comptePrincipal = req.query.comptePrincipal || req.headers['x-compte-principal'];
+      const ipAddress = req.ip || req.connection.remoteAddress;
+      const userAgent = req.headers['user-agent'];
 
-      if (!numero) {
-        return res.status(400).json({ error: 'Numéro de téléphone requis' });
-      }
-
-      const telephone = await Telephone.findOne({ numero: numero })
-          .populate('client');
-
-      if (!telephone) {
-        return res.status(404).json({ error: 'Numéro de téléphone non trouvé' });
-      }
-      if (!telephone.active) {
-        return res.status(403).json({ error: 'Numéro de téléphone inactif' });
-      }
-
-      const clientData = {
-        id: telephone.client._id,
-        nom: telephone.client.nom,
-        prenom: telephone.client.prenom,
-        photo: telephone.client.photo,
-        numeroTelephone: telephone.numero,
-        dateOptension: telephone.dateOptension,
-        active: telephone.active
-      };
-
-      res.json(clientData);
-    } catch (error) {
-      console.error('Erreur lors de la récupération du client:', error);
-      res.status(500).json({ error: 'Erreur interne du serveur' });
-    }
-  },
-
-  // Créer un nouveau client
-  createClient: async (req, res) => {
-    try {
-      const { error, value } = clientSchema.validate(req.body);
-
-      if (error) {
-        return res.status(400).json({ error: error.details[0].message });
-      }
-
-      const client = new Client(value);
-      await client.save();
-
-      res.status(201).json(client);
-    } catch (error) {
-      console.error('Erreur lors de la création du client:', error);
-      res.status(500).json({ error: 'Erreur interne du serveur' });
-    }
-  },
-
-  // Lister tous les clients avec leurs téléphones
-  getAllClients: async (req, res) => {
-    try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const skip = (page - 1) * limit;
-
-      const clients = await Client.find()
-          .skip(skip)
-          .limit(limit)
-          .sort({ createdAt: -1 });
-
-      // Récupérer les téléphones pour chaque client
-      const clientsWithTelephones = await Promise.all(
-          clients.map(async (client) => {
-            const telephones = await Telephone.find({ client: client._id });
-            return {
-              ...client.toObject(),
-              telephones: telephones
-            };
-          })
+      const result = await clientService.getClientByNumero(
+        numero, 
+        comptePrincipal, 
+        ipAddress, 
+        userAgent
       );
 
-      const total = await Client.countDocuments();
-
-      res.json({
-        clients: clientsWithTelephones,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit)
-        }
-      });
-    } catch (error) {
-      console.error('Erreur lors de la récupération des clients:', error);
-      res.status(500).json({ error: 'Erreur interne du serveur' });
-    }
-  },
-
-  // Récupérer un client par ID
-  getClientById: async (req, res) => {
-    try {
-      const { clientId } = req.params;
-
-      const client = await Client.findById(clientId);
-
-      if (!client) {
-        return res.status(404).json({ error: 'Client non trouvé' });
+      if (!result.success) {
+        return res.status(404).json(result);
       }
 
-      // Récupérer les téléphones du client
-      const telephones = await Telephone.find({ client: clientId });
+      return res.status(200).json(result);
 
-      res.json({
-        ...client.toObject(),
-        telephones: telephones
-      });
     } catch (error) {
-      console.error('Erreur lors de la récupération du client:', error);
-      res.status(500).json({ error: 'Erreur interne du serveur' });
-    }
-  },
-
-  // Mettre à jour un client
-  updateClient: async (req, res) => {
-    try {
-      const { clientId } = req.params;
-      const { error, value } = clientSchema.validate(req.body);
-
-      if (error) {
-        return res.status(400).json({ error: error.details[0].message });
-      }
-
-      const client = await Client.findByIdAndUpdate(
-          clientId,
-          value,
-          { new: true, runValidators: true }
-      );
-
-      if (!client) {
-        return res.status(404).json({ error: 'Client non trouvé' });
-      }
-
-      res.json(client);
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour du client:', error);
-      res.status(500).json({ error: 'Erreur interne du serveur' });
-    }
-  },
-
-  // Supprimer un client
-  deleteClient: async (req, res) => {
-    try {
-      const { clientId } = req.params;
-
-      // Supprimer d'abord tous les téléphones du client
-      await Telephone.deleteMany({ client: clientId });
-
-      // Supprimer le client
-      const client = await Client.findByIdAndDelete(clientId);
-
-      if (!client) {
-        return res.status(404).json({ error: 'Client non trouvé' });
-      }
-
-      res.json({ message: 'Client et ses téléphones supprimés avec succès' });
-    } catch (error) {
-      console.error('Erreur lors de la suppression du client:', error);
-      res.status(500).json({ error: 'Erreur interne du serveur' });
+      next(error);
     }
   }
-};
 
-module.exports = clientController;
+  /**
+   * GET /api/clients
+   * Recherche des clients (pour admin)
+   */
+  async searchClients(req, res, next) {
+    try {
+      const { numero, nom, prenom, active, page = 1, limit = 10 } = req.query;
+
+      const filters = {};
+      if (numero) filters.numero = numero;
+      if (nom) filters.nom = nom;
+      if (prenom) filters.prenom = prenom;
+      if (active !== undefined) filters.active = active === 'true';
+
+      const result = await clientService.searchClients(
+        filters,
+        parseInt(page),
+        parseInt(limit)
+      );
+
+      return res.status(200).json(result);
+
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/logs/compte/:comptePrincipal
+   * Récupère les logs d'un compte principal
+   */
+  async getLogsByCompte(req, res, next) {
+    try {
+      const { comptePrincipal } = req.params;
+      const { page = 1, limit = 20 } = req.query;
+
+      const result = await clientService.getRequestLogsByCompte(
+        comptePrincipal,
+        parseInt(page),
+        parseInt(limit)
+      );
+
+      return res.status(200).json(result);
+
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/logs
+   * Récupère tous les logs avec filtres
+   */
+  async getAllLogs(req, res, next) {
+    try {
+      const { 
+        numero, 
+        statut, 
+        comptePrincipal, 
+        dateDebut, 
+        dateFin, 
+        page = 1, 
+        limit = 20 
+      } = req.query;
+
+      const filters = {};
+      if (numero) filters.numero = numero;
+      if (statut) filters.statut = statut;
+      if (comptePrincipal) filters.comptePrincipal = comptePrincipal;
+      if (dateDebut) filters.dateDebut = dateDebut;
+      if (dateFin) filters.dateFin = dateFin;
+
+      const result = await clientService.getAllRequestLogs(
+        filters,
+        parseInt(page),
+        parseInt(limit)
+      );
+
+      return res.status(200).json(result);
+
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/health
+   * Vérifie le statut du service
+   */
+  async healthCheck(req, res) {
+    return res.status(200).json({
+      success: true,
+      service: 'GesClient',
+      status: 'UP',
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+module.exports = new ClientController();
